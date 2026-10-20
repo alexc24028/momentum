@@ -20,17 +20,19 @@ export default function TaskWorkspace({ userId }) {
   const [editingTask, setEditingTask] = useState(false)
   const [editingStep, setEditingStep] = useState(null)
   const [managing, setManaging] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [stepsExpanded, setStepsExpanded] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
+  const deleteTrigger = useRef(null)
   const [supportsDetails, setSupportsDetails] = useState(false)
   const [taskDescription, setTaskDescription] = useState('')
   const [due, setDue] = useState('')
-  const [editingMetadata, setEditingMetadata] = useState(null)
   const [draggedId, setDraggedId] = useState(null)
   const [dropTargetId, setDropTargetId] = useState(null)
   const dragSource = useRef(null)
   const handleRefs = useRef(new Map())
   const pendingHandleFocus = useRef(null)
   const task = tasks.find(item => item.id === selectedId)
+  const pendingDelete = tasks.find(item => item.id === deletingId)
   const steps = ordered(task?.steps ?? [])
   const current = steps.find(step => !step.is_complete)
   const completed = steps.filter(step => step.is_complete).length
@@ -63,16 +65,16 @@ export default function TaskWorkspace({ userId }) {
 
   function openTask(id) {
     setSelectedId(id)
+    setStepsExpanded(false)
     setFocusing(false)
     setTaskDescription('')
     setDue('')
-    setEditingMetadata(null)
     setTitle('')
     setDescription('')
     setEditingTask(false)
     setEditingStep(null)
     setManaging(false)
-    setDeleting(false)
+    setDeletingId(null)
     setError('')
     setMessage('')
   }
@@ -96,7 +98,11 @@ export default function TaskWorkspace({ userId }) {
     if (!title.trim()) { setError('Enter a task title.'); return }
     save(async () => {
       if (editingTask) {
-        const updated = await api.updateTask(userId, task.id, title.trim())
+        const values = { title: title.trim(), ...(supportsDetails ? {
+          description: taskDescription.trim() || null,
+          due_at: due ? new Date(due).toISOString() : null,
+        } : {}) }
+        const updated = await api.updateTask(userId, task.id, values)
         replaceTask(updated)
         setEditingTask(false)
         setTitle('')
@@ -110,7 +116,6 @@ export default function TaskWorkspace({ userId }) {
         setTasks(items => [...items, { ...created, steps: [] }])
         openTask(created.id)
       }
-      setMessage('Task saved.')
     })
   }
 
@@ -128,25 +133,6 @@ export default function TaskWorkspace({ userId }) {
       }
       setDescription('')
       setEditingStep(null)
-      setMessage('Step saved.')
-    })
-  }
-
-  function startMetadata(field) {
-    setEditingMetadata(field)
-    setTaskDescription(task.description ?? '')
-    setDue(localDateTime(task.due_at))
-  }
-
-  function saveMetadata(event) {
-    event.preventDefault()
-    save(async () => {
-      const values = editingMetadata === 'description'
-        ? { description: taskDescription.trim() || null }
-        : { due_at: due ? new Date(due).toISOString() : null }
-      replaceTask(await api.updateTask(userId, task.id, values))
-      setEditingMetadata(null)
-      setMessage('Task details saved.')
     })
   }
 
@@ -164,6 +150,32 @@ export default function TaskWorkspace({ userId }) {
     })
   }
 
+  function requestDelete(event, item) {
+    event.stopPropagation()
+    deleteTrigger.current = event.currentTarget
+    setDeletingId(item.id)
+    setError('')
+  }
+
+  function cancelDelete() {
+    setDeletingId(null)
+    setError('')
+    deleteTrigger.current?.focus()
+  }
+
+  const deleteConfirmation = pendingDelete && <div className="notice delete-confirmation" role="group" aria-label="Delete task confirmation">
+    <p>Delete “{pendingDelete.title}” and all its steps? This cannot be undone.</p>
+    <div className="delete-confirmation-actions">
+      <button onClick={() => save(async () => {
+        await api.deleteTask(userId, pendingDelete.id)
+        setTasks(items => items.filter(item => item.id !== pendingDelete.id))
+        if (selectedId === pendingDelete.id) openTask(null)
+        else setDeletingId(null)
+      })}>Delete task permanently</button>
+      <button className="text-button" autoFocus onClick={cancelDelete}>Cancel deletion</button>
+    </div>
+  </div>
+
   if (loading) return <p role="status">Loading your tasks…</p>
   if (loadFailed) return <section className="task-workspace">
     <p role="alert" className="notice error">{error}</p>
@@ -172,7 +184,7 @@ export default function TaskWorkspace({ userId }) {
 
   return <section className={`task-workspace ${task ? 'task-detail' : ''}`} aria-label="Break It Down" aria-busy={busy}>
     {error && <p role="alert" className="notice error">{error}</p>}
-    {message && <p role="status" className="notice">{message}</p>}
+    {message && <p role="status" className="sr-only">{message}</p>}
     {!supportsDetails && <p className="notice" role="status">{api.migrationMessage}</p>}
     <fieldset disabled={busy}>
       {!task ? <>
@@ -187,6 +199,7 @@ export default function TaskWorkspace({ userId }) {
           </details>}
         </form>
         <h2 className="tasks-heading">Your tasks</h2>
+        {deleteConfirmation}
         {!tasks.length && <div className="empty-tasks"><h3>A fresh place to begin.</h3><p>No tasks yet. What would you like to make a little easier?</p></div>}
         {supportsDetails && tasks.length > 1 && <p className="reorder-help" id="reorder-help">Drag a handle to reorder. With the keyboard, focus a handle and use arrow keys to move a task.</p>}
         {tasks.length > 0 && <nav aria-label="Your tasks" className="task-list">{tasks.map((item, index) => {
@@ -220,6 +233,10 @@ export default function TaskWorkspace({ userId }) {
               onPointerCancel={() => { dragSource.current = null; setDraggedId(null); setDropTargetId(null) }}>
               <Icon name="grip" />
             </button>}
+            <button type="button" className="icon-button delete-task card-delete" aria-label={`Delete ${item.title}`} title={`Delete ${item.title}`}
+              onPointerDown={event => event.stopPropagation()} onClick={event => requestDelete(event, item)}>
+              <Icon name="trash" />
+            </button>
             <button className="task-card-open" aria-label={item.title} aria-describedby={`progress-${item.id}`} onClick={() => openTask(item.id)}>
             <span className="card-title">{item.title}</span>
             {item.description && <span className="card-description">{item.description}</span>}
@@ -235,86 +252,85 @@ export default function TaskWorkspace({ userId }) {
       </> : <>
         <div className="task-detail-heading">
           <h2 className="task-title">{task.title}</h2>
-          <button className="icon-button" aria-label="Edit task title" title="Edit task title" onClick={() => { setEditingTask(true); setTitle(task.title) }}><Icon name="pencil" /></button>
-          <button className="icon-button delete-task" aria-label="Delete task" title="Delete task" onClick={() => setDeleting(true)}><Icon name="trash" /></button>
+          <button className="icon-button" aria-label="Edit task" title="Edit task" onClick={() => {
+            setEditingTask(true)
+            setTitle(task.title)
+            setTaskDescription(task.description ?? '')
+            setDue(localDateTime(task.due_at))
+            setError('')
+          }}><Icon name="pencil" /></button>
+          <button className="icon-button delete-task" aria-label="Delete task" title="Delete task" onClick={event => requestDelete(event, task)}><Icon name="trash" /></button>
         </div>
-        {supportsDetails && !focusing && <div className="task-metadata">
-          <div className="metadata-row"><p className="task-description">{task.description || 'No description yet.'}</p><button className="icon-button" aria-label="Edit description" onClick={() => startMetadata('description')}><Icon name="pencil" /></button></div>
-          <div className="metadata-row"><DueDate value={task.due_at} /><button className="icon-button" aria-label="Edit due date" onClick={() => startMetadata('due')}><Icon name="pencil" /></button></div>
-          {editingMetadata && <form onSubmit={saveMetadata}>
-            {editingMetadata === 'description' ? <><label htmlFor="edit-description">Description</label><textarea id="edit-description" rows={3} value={taskDescription} onChange={e => setTaskDescription(e.target.value)} /></>
-              : <><label htmlFor="edit-due">Due date and time</label><input id="edit-due" type="datetime-local" value={due} onChange={e => setDue(e.target.value)} /><small>Times use your local time zone. Clear to remove the due date.</small></>}
-            <button>Save details</button>
-            <button type="button" className="text-button" onClick={() => setEditingMetadata(null)}>Cancel details edit</button>
-          </form>}
+        {supportsDetails && !focusing && !editingTask && (task.description || task.due_at) && <div className="task-metadata">
+          {task.description && <p className="task-description">{task.description}</p>}
+          {task.due_at && <DueDate value={task.due_at} />}
         </div>}
-        {deleting ? <div className="notice">
-          <p>Delete this task and all its steps? This cannot be undone.</p>
-          <button onClick={() => save(async () => {
-            await api.deleteTask(userId, task.id)
-            setTasks(items => items.filter(item => item.id !== task.id))
-            openTask(null)
-            setMessage('Task deleted.')
-          })}>Delete task permanently</button>
-          <button className="text-button" onClick={() => setDeleting(false)}>Cancel deletion</button>
-        </div> : editingTask ? <form onSubmit={submitTask}>
+        {pendingDelete ? deleteConfirmation : editingTask ? <form onSubmit={submitTask}>
           <label htmlFor="task-title">Task title</label>
-          <input id="task-title" required value={title} onChange={e => setTitle(e.target.value)} />
-          <button>Save task</button>
-          <button type="button" className="text-button" onClick={() => { setEditingTask(false); setTitle('') }}>Cancel task edit</button>
+          <input id="task-title" autoFocus required value={title} onChange={e => setTitle(e.target.value)} />
+          {supportsDetails && <OptionalTaskFields description={taskDescription} due={due} onDescription={setTaskDescription} onDue={setDue} />}
+          <div className="edit-actions">
+            <button>Save task</button>
+            <button type="button" className="text-button" onClick={() => { setEditingTask(false); setTitle(''); setTaskDescription(''); setDue(''); setError('') }}>Cancel</button>
+          </div>
         </form> : <>
-          {managing ? <>
-            <h3>Edit your steps</h3>
-            {!steps.length && <p>No steps yet.</p>}
-            <ul className="step-list">{steps.map(step => <li key={step.id}>
-              <span>{step.description}{step.is_complete ? ' — complete' : ''}</span>
-              <button className="text-button" onClick={() => { setEditingStep(step.id); setDescription(step.description) }}>Edit step: {step.description}</button>
-              <button className="text-button" onClick={() => save(async () => {
-                await api.deleteStep(task.id, step.id)
-                replaceTask({ steps: steps.filter(item => item.id !== step.id) })
-                if (editingStep === step.id) { setEditingStep(null); setDescription('') }
-                setMessage('Step deleted.')
-              })}>Delete step: {step.description}</button>
-            </li>)}</ul>
-            <button className="text-button" onClick={() => { setManaging(false); setEditingStep(null); setDescription('') }}>Return to next step</button>
-          </> : current ? <div className="current-step" role="region" aria-label="Your next step">
+          {current ? <div className="current-step" role="region" aria-label="Your next step">
             <h3>Your next step</h3>
             <p>{current.description}</p>
-            <button onClick={() => save(async () => {
-              const updated = await api.updateStep(task.id, current.id, { is_complete: true })
-              replaceTask({ steps: steps.map(step => step.id === updated.id ? updated : step) })
-              setMessage('Step complete.')
-            })}>Mark step complete</button>
-            <FocusTimer key={current.id} onFocusChange={setFocusing} />
-          </div> : <p role="status">{steps.length ? 'All steps are finished. Take a moment to enjoy that.' : 'No steps yet. Add a small, actionable first step.'}</p>}
-          {!managing && !focusing && <section className="all-steps" aria-labelledby="all-steps-heading">
-            <div className="all-steps-header">
-              <h3 id="all-steps-heading">All steps</h3>
-              <span className="step-count" aria-live="polite" aria-atomic="true">{completed}/{steps.length} steps complete</span>
+            <div className="focus-action-row">
+              <button className="complete-step-button" onClick={() => save(async () => {
+                const updated = await api.updateStep(task.id, current.id, { is_complete: true })
+                replaceTask({ steps: steps.map(step => step.id === updated.id ? updated : step) })
+              })}>Complete step</button>
+              <FocusTimer key={current.id} onFocusChange={setFocusing} />
             </div>
+          </div> : <p role="status">{steps.length ? 'All steps are finished. Take a moment to enjoy that.' : 'No steps yet. Add a small, actionable first step.'}</p>}
+          {!focusing && <section className="all-steps" aria-labelledby="all-steps-heading">
+            <h3 className="all-steps-title">
+              <button type="button" className="all-steps-toggle" aria-label="All steps" aria-describedby="all-steps-count"
+                aria-expanded={stepsExpanded} aria-controls="all-steps-panel" onClick={() => setStepsExpanded(value => !value)}>
+                <span id="all-steps-heading">All steps</span>
+                <span id="all-steps-count" className="step-count" aria-live="polite" aria-atomic="true">{completed}/{steps.length} steps complete</span>
+                <svg className="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+            </h3>
             <div className="progress-track" role="progressbar" aria-label="Step completion" aria-valuemin={0} aria-valuemax={100}
               aria-valuenow={steps.length ? Math.round(completed / steps.length * 100) : 0}
               aria-valuetext={`${completed} of ${steps.length} steps complete`}>
               <span style={{ width: `${steps.length ? completed / steps.length * 100 : 0}%` }} />
             </div>
-            {steps.length ? <ol className="all-steps-list">{steps.map((step, index) =>
-              <li key={step.id} className={step.is_complete ? 'is-complete' : step.id === current?.id ? 'is-current' : ''}
-                aria-current={step.id === current?.id ? 'step' : undefined}>
-                <span className="step-marker" aria-hidden="true">{step.is_complete ? '✓' : index + 1}</span>
-                <span className="step-description">{step.description}</span>
-                <span className="step-state">{step.is_complete ? 'Complete' : step.id === current?.id ? 'Next' : 'Upcoming'}</span>
-              </li>)}</ol> : <p>Your steps will appear here as you add them.</p>}
+            <div id="all-steps-panel" hidden={!stepsExpanded}>
+              {managing ? <>
+                <h3>Edit your steps</h3>
+                {!steps.length && <p>No steps yet.</p>}
+                <ul className="step-list">{steps.map(step => <li key={step.id}>
+                  <span>{step.description}{step.is_complete ? ' — complete' : ''}</span>
+                  <button className="text-button" onClick={() => { setEditingStep(step.id); setDescription(step.description) }}>Edit step: {step.description}</button>
+                  <button className="text-button" onClick={() => save(async () => {
+                    await api.deleteStep(task.id, step.id)
+                    replaceTask({ steps: steps.filter(item => item.id !== step.id) })
+                    if (editingStep === step.id) { setEditingStep(null); setDescription('') }
+                  })}>Delete step: {step.description}</button>
+                </li>)}</ul>
+                <button className="text-button" onClick={() => { setManaging(false); setEditingStep(null); setDescription('') }}>Return to step list</button>
+              </> : <>
+                {steps.length ? <ol className="all-steps-list">{steps.map((step, index) =>
+                  <li key={step.id} className={step.is_complete ? 'is-complete' : step.id === current?.id ? 'is-current' : ''}
+                    aria-current={step.id === current?.id ? 'step' : undefined}>
+                    <span className="step-marker" aria-hidden="true">{step.is_complete ? '✓' : index + 1}</span>
+                    <span className="step-description">{step.description}</span>
+                    <span className="step-state">{step.is_complete ? 'Complete' : step.id === current?.id ? 'Next' : 'Upcoming'}</span>
+                  </li>)}</ol> : <p>Your steps will appear here as you add them.</p>}
+              </>}
+              <form onSubmit={submitStep}>
+                <label htmlFor="step-description">{editingStep ? 'Edit step description' : 'Add a small step'}</label>
+                <input id="step-description" required value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Open the document" />
+                <button className="secondary-button" type="submit">{editingStep ? 'Save step' : 'Add step'}</button>
+                {editingStep && <button className="text-button" type="button" onClick={() => { setEditingStep(null); setDescription('') }}>Cancel step edit</button>}
+              </form>
+              {!managing && <button className="text-button" onClick={() => setManaging(true)}>Edit or delete steps</button>}
+            </div>
           </section>}
-          {!focusing && <>
-          <form onSubmit={submitStep}>
-            <label htmlFor="step-description">{editingStep ? 'Edit step description' : 'Add a small step'}</label>
-            <input id="step-description" required value={description} onChange={e => setDescription(e.target.value)} placeholder="e.g. Open the document" />
-            <button className="secondary-button" type="submit">{editingStep ? 'Save step' : 'Add step'}</button>
-            {editingStep && <button className="text-button" type="button" onClick={() => { setEditingStep(null); setDescription('') }}>Cancel step edit</button>}
-          </form>
-          {!managing && <button className="text-button" onClick={() => setManaging(true)}>Edit or delete steps</button>}
-          </>}
-
         </>}
       </>}
       {task && <footer className="task-detail-footer"><button className="back-button" onClick={() => openTask(null)}>← Back to tasks</button></footer>}

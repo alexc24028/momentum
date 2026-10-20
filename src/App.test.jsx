@@ -54,6 +54,7 @@ test('sign-in errors are shown and a subsequent sign-in opens home', async () =>
   expect((await screen.findByRole('alert')).textContent).toBe('Invalid login credentials')
   await user.click(screen.getByRole('button', { name: 'Sign in', exact: true }))
   expect(await screen.findByText('A little space to begin.')).toBeTruthy()
+  expect(screen.queryByText('You’re signed in. Welcome to Momentum.')).toBeNull()
 })
 
 test('restores saved session and signs out to welcome', async () => {
@@ -63,7 +64,7 @@ test('restores saved session and signs out to welcome', async () => {
   render(<App />)
   await user.click(await screen.findByRole('button', { name: 'Sign out' }))
   expect(await screen.findByRole('button', { name: 'Get Started' })).toBeTruthy()
-  expect(screen.getByRole('status').textContent).toContain('signed out')
+  expect(screen.queryByText('You’re signed out.')).toBeNull()
 })
 
 test('shows initial loading and does not overwrite a newer auth event', async () => {

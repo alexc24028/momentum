@@ -14,7 +14,7 @@ export function localDateTime(value) {
 }
 
 export function DueDate({ value }) {
-  return value ? <time dateTime={value}>Due {new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time> : <span>No due date</span>
+  return value ? <time dateTime={value}>Due {new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</time> : null
 }
 
 export function OptionalTaskFields({ description, due, onDescription, onDue }) {

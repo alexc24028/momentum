@@ -30,7 +30,7 @@ export default function App() {
       setPassword('')
       if (event === 'SIGNED_OUT') {
         setScreen('welcome')
-        setMessage('You’re signed out.')
+        setMessage('')
       }
     })
     supabase.auth.getSession().then(({ data, error: sessionError }) => {
@@ -65,7 +65,7 @@ export default function App() {
         : await supabase.auth.signInWithPassword(credentials)
       if (result.error) throw result.error
       setPassword('')
-      setMessage(result.data.session ? 'You’re signed in. Welcome to Momentum.'
+      setMessage(result.data.session ? ''
         : 'Check your email for a confirmation link, then return here to sign in. If you already have an account, try signing in instead.')
     } catch (err) {
       setError(err.message || 'We couldn’t connect. Please try again.')
@@ -116,7 +116,6 @@ export default function App() {
           <p>One task. One small step. At your own pace.</p>
         </div>
         {error && <p className="notice error" role="alert">{error}</p>}
-        {message && <p className="notice" role="status">{message}</p>}
         <TaskWorkspace key={session.user.id} userId={session.user.id} />
       </main>
     </div>

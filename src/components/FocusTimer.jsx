@@ -46,18 +46,14 @@ export default function FocusTimer({ onFocusChange }) {
   const seconds = Math.ceil(remaining / 1000)
   const display = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
-  return <section className="focus-timer" aria-labelledby="focus-timer-heading">
-    <h4 id="focus-timer-heading">Just start · 5 minutes</h4>
+  return <div className="focus-timer" role="group" aria-label="Five-minute focus timer">
     <span className="timer-digits" role="timer" aria-label="Time remaining" aria-live="off">{display}</span>
     <div className="timer-actions">
-      {phase === 'idle' && <button className="secondary-button" onClick={start}>Start 5-minute focus</button>}
+      {phase === 'idle' && <button className="secondary-button" aria-label="Start 5-minute focus" onClick={start}>Start</button>}
       {phase === 'running' && <button className="secondary-button" onClick={pause}>Pause</button>}
       {phase === 'paused' && <button className="secondary-button" onClick={start}>Resume</button>}
-      {phase !== 'idle' && <button className="text-button" onClick={reset}>Reset timer</button>}
+      {phase !== 'idle' && <button className="text-button" aria-label="Reset timer" onClick={reset}>Reset</button>}
     </div>
-    <p className="timer-message" role="status">{phase === 'finished'
-      ? 'Five minutes, one small start. You can keep going or take a break.'
-      : phase === 'paused' ? 'Paused. Take the time you need.'
-        : phase === 'running' ? 'Just this step. You can pause or stop whenever you need.' : 'An optional little space to begin.'}</p>
-  </section>
+    {phase === 'finished' && <p className="timer-message" role="status">Five minutes, one small start. You can keep going or take a break.</p>}
+  </div>
 }
