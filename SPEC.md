@@ -4,24 +4,18 @@
 Build a simple, evidence-informed productivity app that helps
 people overcome task initiation difficulties and reduce overwhelm.
 
-The app draws on implementation intentions, behavioral activation,
-and strategies for reducing planning demands. It is not a medical treatment.
+The app draws on behavioral activation and strategies for reducing
+planning demands. It is not a medical treatment.
 
 ## Core Features
 
 ### 1. Break It Down
 - Users enter a task they are struggling to start.
 - Users break the task into small, actionable steps.
-- Show only one next step at a time.
+- Emphasize one next incomplete step, with an ordered all-steps list below.
 - Mark steps complete to move forward.
 
-### 2. Make a Starting Plan
-- Users choose when they will start.
-- Users specify where they will work.
-- Display a simple plan:
-  "At [time], in [place], I will [first step]."
-
-### 3. Just Start
+### 2. Just Start
 - Provide an optional 5-minute focus timer.
 - Display only the current step during the timer.
 - Allow users to stop, pause, or continue without penalties.
@@ -33,7 +27,10 @@ and strategies for reducing planning demands. It is not a medical treatment.
 - Coding Agent: Codex
 
 ## Data
-- Tasks: ID, title, starting time, starting place.
+- Tasks: ID, user ID, title, optional description, optional due date/time,
+  custom sort position, and creation timestamp.
+- Legacy starting_time and starting_place columns remain in the database
+  for compatibility; the app does not use or change them.
 - Steps: ID, task ID, description, completion status.
 - Save and load tasks and steps from Supabase.
 
@@ -53,6 +50,7 @@ and strategies for reducing planning demands. It is not a medical treatment.
 - Use appropriate database permissions.
 
 ## Out of Scope
+- When-and-where starting plans.
 - AI-generated steps.
 - Mood tracking.
 - Energy-level filtering.
@@ -62,7 +60,6 @@ and strategies for reducing planning demands. It is not a medical treatment.
 
 ## Definition of Done
 - [ ] Users can create tasks and actionable steps.
-- [ ] Users can create a when-and-where starting plan.
 - [ ] Users can focus on one step at a time.
 - [ ] Tasks and steps persist in Supabase.
 - [ ] App is deployed publicly through Vercel.
